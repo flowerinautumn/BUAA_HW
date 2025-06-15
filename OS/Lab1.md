@@ -1,52 +1,127 @@
-### Excercise 1.1
+### lab1实验报告
 
-**函数2：`readelf`**
+#### 1. 思考题：
 
-```c
-int readelf(const void *binary, size_t size) {
-    // 将二进制数据强制转换为ELF文件头结构体指针
-    Elf32_Ehdr *ehdr = (Elf32_Ehdr *)binary;
+##### Thinking 1.1
 
-    // 检查是否是合法的ELF文件
-    if (!is_elf_format(binary, size)) {
-        fputs("not an elf file\n", stderr); // 输出错误信息
-        return -1;
-    }
-
-    // 获取节头表（Section Header Table）的信息
-    const void *sh_table;          // 节头表起始地址
-    Elf32_Half sh_entry_count;     // 节头数量
-    Elf32_Half sh_entry_size;      // 每个节头的大小（字节）
-
-    // 从ELF头中提取信息：
-    sh_table = binary + ehdr->e_shoff;      // 节头表偏移 = 文件起始地址 + e_shoff
-    sh_entry_count = ehdr->e_shnum;         // 节头数量
-    sh_entry_size = ehdr->e_shentsize;      // 单个节头大小
-
-    // 遍历所有节头并输出地址
-    for (int i = 0; i < sh_entry_count; i++) {
-        const Elf32_Shdr *shdr;   // 当前节头的指针
-        unsigned int addr;        // 节在内存中的虚拟地址（sh_addr）
-
-        // 计算当前节头的位置：节头表起始地址 + 索引 * 单个节头大小
-        shdr = (const Elf32_Shdr *)((const char *)sh_table + i * sh_entry_size);
-        addr = shdr->sh_addr;    // 获取节的内存地址
-
-        // 输出节索引和地址（如 "0:0x8048000"）
-        printf("%d:0x%x\n", i, addr);
-    }
-
-    return 0;
-}
+```
+Thinking 1.1 在阅读 附录中的编译链接详解 以及本章内容后，尝试分别使用实验环境中的原生 x86 工具链（gcc、ld、readelf、objdump 等）和 MIPS 交叉编译工具链（带有mips-linux-gnu- 前缀，如 mips-linux-gnu-gcc、mips-linux-gnu-ld），重复其中的编译和解析过程，观察相应的结果，并解释其中向objdump传入的参数的含义。
 ```
 
-- *在C语言中，将指针与整数相加时，实际上是将该整数乘以指针所指向类型的大小。*
+- objdump命令的常用参数如下：
 
-- 实际代码中可能使用了GCC等编译器，它们允许void指针的算术运算，将其视为char*类型，即每次加减1移动一个字节。这种情况下，sh_table + i \* sh_entry_size会被当作(char*)sh_table + i * sh_entry_size，从而正确计算偏移量。
+  | 参数 |                             含义                             |
+  | :--: | :----------------------------------------------------------: |
+  |  -d  |     将代码段反汇编 反汇编那些应该还有指令机器码的section     |
+  |  -D  |               与 -d 类似，但反汇编所有section                |
+  |  -S  | 将代码段反汇编的同时，将反汇编代码和源代码交替显示，源码编译时需要加-g参数，即需要调试信息 |
+  |  -C  |                     将C++符号名逆向解析                      |
+  |  -l  |             反汇编代码中插入源代码的文件名和行号             |
+  |  -j  | section: 仅反编译所指定的section，可以有多个-j参数来选择多个section |
 
-- 指针运算的底层逻辑：C 语言中，指针的算术运算是 **基于指针类型大小** 的。例如：
+- 先新建一个文件 `hello.c` ：
 
-  - `int *p = ...; p + i`：实际偏移为 `i * sizeof(int)` 字节。
-  - `char *p = ...; p + i`：实际偏移为 `i * 1` 字节（因为 `sizeof(char) = 1`）。
+  ![image-20250321205605438](lab1实验报告.assets/image-20250321205605438.png)
 
-  **但 `void \*` 指针的算术运算在标准 C 中是未定义的**，因此必须显式转换为具体类型的指针（如 `char *`）才能进行字节级偏移计算。
+- 然后使用原生 x86 工具链编译和解析：
+
+  编译并链接：
+
+  ```bash
+  # 生成目标文件
+  gcc -c hello.c -o hello_x86.o
+  # 生成可执行文件
+  gcc hello_x86.o -o hello_x86
+  ```
+
+  使用 `objdump` 反汇编：
+
+  ```bash
+  objdump -d hello_x86.o      # 反汇编目标文件的代码段
+  objdump -d hello_x86        # 反汇编可执行文件的代码段
+  ```
+
+  可以得到：
+
+  ![image-20250321210101771](lab1实验报告.assets/image-20250321210101771.png)
+
+  ![image-20250321210220945](lab1实验报告.assets/image-20250321210220945.png)
+
+##### Thinking 1.2
+
+```
+Thinking 1.2 思考下述问题：
+• 尝试使用我们编写的readelf程序，解析之前在target目录下生成的内核ELF文件。
+• 也许你会发现我们编写的readelf程序是不能解析readelf 文件本身的，而我们刚才介绍的系统工具readelf 则可以解析，这是为什么呢（提示：尝试使用readelf-h，并阅读tools/readelf 目录下的 Makefile，观察 readelf 与 hello 的的不同）
+```
+
+- 使用编写的 `readelf` 解析内核 `ELF` 文件 `mos` 
+
+  ![image-20250321210848949](lab1实验报告.assets/image-20250321210848949.png)
+
+- 使用编写的 `readelf` 文件不能解析本身
+
+  ![image-20250321210954014](lab1实验报告.assets/image-20250321210954014.png)
+
+  但是系统工具 `readelf` 可以
+
+  ![image-20250321211104475](lab1实验报告.assets/image-20250321211104475.png)
+
+  接着再解析 `hello` 文件
+
+  ![image-20250321211227039](lab1实验报告.assets/image-20250321211227039.png)
+
+  通过观察 `readelf` 和 `hello` 类别，发现前者是64位文件而后者是32位文件，所以我们自己编写的 `readelf` 不能解析自己，只能解析32位文件 `hello` 。
+
+##### Thinking 1.3
+
+```
+Thinking1.3在理论课上我们了解到，MIPS体系结构上电时，启动入口地址为0xBFC00000（其实启动入口地址是根据具体型号而定的，由硬件逻辑确定，也有可能不是这个地址，但一定是一个确定的地址），但实验操作系统的内核入口并没有放在上电启动地址，而是按照内存布局图放置。思考为什么这样放置内核还能保证内核入口被正确跳转到？（提示：思考实验中启动过程的两阶段分别由谁执行。）
+```
+
+- 在MIPS架构中，尽管硬件上电时从固定地址（如0xBFC00000）启动，但内核仍能正确跳转到其入口地址的原因在于启动过程分为两个阶段，并通过链接脚本（Linker Script）控制内存布局。
+- 启动过程的两阶段
+  - 第一阶段：Bootloader/模拟器初始化
+    - 硬件启动地址（如0xBFC00000）：此处存放的是Bootloader或固件代码（如实验中的GXemul模拟器逻辑）。
+    - Bootloader的作用：初始化硬件，将内核的可执行文件从存储介质（如磁盘）加载到内存的指定位置。
+    - 模拟器的简化流程：GXemul直接解析ELF格式的内核文件，根据ELF头信息将其代码段、数据段等加载到链接脚本指定的内存地址，无需手动拷贝。
+  - 第二阶段：内核执行
+    - 跳转到内核入口：Bootloader/模拟器完成加载后，主动跳转到内核的入口地址（如`_start`函数），该地址由链接脚本定义，与上电启动地址无关。
+- 链接器根据脚本将内核的各个段（`.text`、`.data`等）分配到指定地址，生成的可执行文件（ELF）中会记录这些地址信息。ELF文件的入口地址（`e_entry`）被设为`_start`，Bootloader/模拟器跳转至此地址。内核的物理地址由链接脚本和加载器（Bootloader/模拟器）共同保证，只要加载到指定位置，无论原始上电地址如何，均可正确执行。
+
+#### 2. 难点分析
+
+- 实验的目的：
+  - 从操作系统角度理解MIPS 体系结构 
+  - 完成 `printk` 函数的`k`的编写
+- 因为此前对于数据类型的理解不够灵活，导致我理解这一部分花了好些时间。我认为这里的理解关键在于，**数据类型并不是某段内存数据的固有属性，而是对它的解释方式。**只要符合类型的大小和对齐要求，就可以把这段数据看做某种类型。
+- 操作系统的启动时，在`QEMU`中的模拟器，启动流程被简化为加载内核到内存，之后跳转到内核的入口。实验时难点是利用代码上下部分完成对`k`来输出键值对。而主要的代码架构如下：
+
+![img](https://i-blog.csdnimg.cn/blog_migrate/16b8d0e479b540c2f2492c4b2f6d0cd9.png)
+
+#### 3. 实验体会
+
+- 实验的 `exam` 部分较为简单，主要分为三个部分，打印键即输出字符串，接着输出 `  >=  ` 字符串，最后在打印数字即可。只需要依次利用  `%s` 和 `%d` 即可。在ELF文件的解析过程中，用到了3个重要的结构体，相当于定义了3种新的数据类型（实际不止3种，其他部分代码里也有定义）。而在实际编写中，就涉及到数据类型的转换。比如在做Exercise 1.1的时候*，*把 void *类型的 binary 强制转换为了 ELF32_Ehdr * 。因为此前对于数据类型的理解不够灵活，导致我理解这一部分花了好些时间。数据类型并不是某段内存数据的固有属性，而是对它的解释方式。只要符合类型的大小和对齐要求，就可以把这段数据看做某种类型。
+
+- 
+
+  ```
+  s = (char *)va_arg(ap, char *);
+  print_str(out, data, s, width, ladjust);
+  print_str(out, data, tt, 4, ladjust);
+  if (long_flag) {
+  	num = va_arg(ap, long int);
+  } else {
+  	num = va_arg(ap, int);
+  }
+  if (num < 0) {
+  	num = -num;
+  	neg_flag = 1;
+  }
+  print_num(out, data, num, 10, neg_flag, width, ladjust, padc, 0);
+  break;
+  ```
+
+  
+
+- 然而实验的 `extra` 比较困难，需要补全四个函数，这次我并没有作出这部分，但是仍然理解到对不同部分文件的理解。`vprintfmt`函数实现的是格式化输出的主体逻辑，被`printk`调用，参数列表中的ap参数也是从上层函数中得来。结合`printk`的用法，比如`printk("%d%c%ld", a, b, c)`，很容易明白可变参数就是需要输出的一系列变量，而`fmt`就是引号中的字符串。
